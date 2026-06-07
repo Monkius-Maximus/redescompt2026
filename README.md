@@ -47,7 +47,7 @@ O projeto demonstra, na pratica, conceitos centrais de sistemas distribuidos e r
 ---
 
 <p align="center">
-  &copy; 2025 Universidade Federal de Pernambuco - Centro de Informática. Todos os direitos reservados.
+  &copy; 2026 Universidade Federal de Pernambuco - Centro de Informática. Todos os direitos reservados.
 </p>
 
 <img width=100% src="https://capsule-render.vercel.app/api?type=waving&color=66CDAA&height=120&section=header"/>

@@ -1,0 +1,21 @@
+{
+  "name": "glossario-tecnico",
+  "version": "0.1.0",
+  "description": "Glossário Técnico Compartilhado — servidor HTTP REST (Equipe 10 · Sistemas Distribuídos · UFPE)",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}

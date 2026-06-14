@@ -28,6 +28,8 @@ glossario-tecnico/
 ├── package.json          # dependências e scripts (dev / start / cliente / demo / typecheck)
 ├── tsconfig.json         # TypeScript (ESM, strict, sem build)
 ├── README.md
+├── public/
+│   └── index.html        # interface web (página de apresentação + formulários; consome a API via fetch)
 └── src/
     ├── index.ts              # ponto de entrada: sobe o servidor na porta fixa
     ├── app.ts                # camada HTTP: middlewares, rotas, mapeia erro → status
@@ -69,7 +71,8 @@ const correntes = new Map<string, Promise<void>>();  // uma "corrente" por chave
 | **ADD** | `POST /termos` | `{ chave, definicao }` | `201` `{ chave, definicao }` | `409`, `422` |
 | **FIX** | `PUT /termos/:chave` | `{ definicao }` | `200` `{ chave, definicao }` | `404`, `422` |
 | (teste) | `GET /health` | — | `200` `{ status: "ok" }` | — |
-| (índice) | `GET /` | — | `200` `{ servico, endpoints }` | — |
+| (web) | `GET /` | — | `200` página HTML (interface) | — |
+| (índice) | `GET /api` | — | `200` `{ servico, endpoints }` | — |
 
 Semântica dos comandos: **ADD só cria** (`409 Conflict` se o termo já existe) e
 **FIX só atualiza** (`404 Not Found` se o termo não existe). Essa separação torna
@@ -133,9 +136,19 @@ npm run demo       # demonstração do mutex por chave (não precisa do servidor
 npm run typecheck  # checagem de tipos (tsc --noEmit)
 ```
 
-O servidor sobe em `http://localhost:3000`
+O servidor sobe em `http://localhost:3000` — **abra esse endereço no navegador
+para usar a interface web** (buscar, listar, adicionar e editar termos).
 
-Exemplos:
+## Interface web
+
+Ao abrir `http://localhost:3000`, o servidor entrega uma página estática
+(`public/index.html`) que consome a própria API por `fetch`. Por ela dá para
+**buscar (QUERY)**, **listar (LIST)**, **adicionar (ADD)** e **editar (FIX)**
+termos por formulários — sem precisar de `curl`/PowerShell e sem mudar a
+arquitetura (o estado continua em memória no servidor; a página é só um cliente
+HTTP). O JSON com a lista de endpoints continua disponível em `GET /api`.
+
+## Exemplos via terminal (curl)
 
 ```bash
 curl localhost:3000/health
@@ -159,8 +172,8 @@ curl localhost:3000/termos
 ```
 
 > No Windows/PowerShell, o `curl` é um apelido para `Invoke-WebRequest` e não
-> entende `-X`/`-H`/`-d`. Para evitar essa confusão, use o **cliente interativo**
-> abaixo (funciona igual em qualquer sistema operacional).
+> entende `-X`/`-H`/`-d`. Para evitar essa confusão, use a **interface web** ou o
+> **cliente interativo** abaixo (funcionam igual em qualquer sistema operacional).
 
 ## Cliente interativo (sem precisar de curl)
 
@@ -225,9 +238,9 @@ Ele imprime uma linha do tempo de três cenários:
 - [x] Validações de formato e regras de negócio (Zod + unicidade/existência no store).
 - [x] Plano de bloqueios transacionais (mutex por chave, em `src/locks.ts`).
 
-Além do mínimo exigido, a entrega inclui um **cliente de linha de comando**
-(`npm run cliente`) para interação sem `curl` e uma **demonstração executável do
-mutex por chave** (`npm run demo`).
+Além do mínimo exigido, a entrega inclui uma **interface web** (`GET /`), um
+**cliente de linha de comando** (`npm run cliente`) para interação sem `curl` e
+uma **demonstração executável do mutex por chave** (`npm run demo`).
 
 ## Equipe do Projeto
 

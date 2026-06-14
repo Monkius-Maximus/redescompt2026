@@ -21,6 +21,116 @@ A arquitetura é um **único servidor com estado central em memória**. A
 concorrência entre requisições é tratada com **bloqueio por chave** (ver
 [Estratégia de locking](#estratégia-de-locking-bloqueio-transacional)).
 
+## Arquitetura
+
+Visão geral: clientes (o **navegador** com a interface web, o **cliente de linha
+de comando** ou ferramentas como `curl`) conversam com um **único servidor
+Express** pelo **protocolo REST/JSON**. O servidor é dividido em camadas de
+responsabilidade única — entrada HTTP (`app.ts`), validação de formato
+(`schemas.ts`), regras de domínio (`store.ts`) e controle de concorrência
+(`locks.ts`) — sobre um estado central em memória (`Map`).
+
+### Diagrama de componentes
+
+```mermaid
+flowchart TD
+    UI["Navegador<br/>interface web (public/index.html)"]
+    CLI["Cliente CLI<br/>(src/cliente.ts)"]
+    CURL["curl / Postman"]
+
+    subgraph Servidor["Servidor Express — porta 3000"]
+        APP["app.ts<br/>rotas REST + middlewares<br/>(JSON · estático · validação Zod)"]
+        STORE["store.ts<br/>regras de domínio<br/>QUERY · LIST · ADD · FIX"]
+        LOCK["locks.ts<br/>mutex por chave"]
+        MAP[("Map em memória<br/>chave → definição")]
+        APP --> STORE
+        STORE --> LOCK
+        STORE --> MAP
+    end
+
+    UI -->|HTTP REST / JSON| APP
+    CLI -->|HTTP REST / JSON| APP
+    CURL -->|HTTP REST / JSON| APP
+```
+
+### Funcionamento de cada elemento
+
+| Elemento | Responsabilidade | Conversa com |
+|---|---|---|
+| `src/index.ts` | Ponto de entrada: sobe o servidor na porta fixa (`3000`). | `app.ts` |
+| `src/app.ts` | Camada HTTP: middlewares (JSON, arquivos estáticos, validação), rotas REST e o mapeamento de erro de domínio → status HTTP. | `schemas`, `store` |
+| `src/schemas.ts` | Valida o **formato** das entradas com Zod e infere os tipos do mesmo schema (uma fonte de verdade). | usado por `app` |
+| `src/store.ts` | Mantém o estado (`Map`) e aplica as **regras de domínio**: unicidade no ADD, existência no FIX. | `locks`, `Map` |
+| `src/locks.ts` | **Mutex por chave**: serializa operações sobre o mesmo termo; chaves diferentes seguem em paralelo. | usado por `store` |
+| `public/index.html` | **Interface web** (cliente) que consome a API por `fetch`. | API via HTTP |
+| `src/cliente.ts` | **Cliente de linha de comando** que consome a API. | API via HTTP |
+| `src/demo-concorrencia.ts` | Exercita o `withKeyLock` para tornar a concorrência **visível**. | `locks` |
+
+### Fluxo de uma requisição (ADD e QUERY)
+
+```mermaid
+sequenceDiagram
+    actor C as Cliente
+    participant A as app.ts
+    participant V as Zod (schemas.ts)
+    participant S as store.ts
+    participant L as locks.ts
+    participant M as Map
+
+    Note over C,M: ADD — POST /termos
+    C->>A: POST /termos {chave, definicao}
+    A->>V: validar formato
+    alt formato inválido
+        A-->>C: 422 validação falhou
+    else formato ok
+        A->>S: add(chave, definicao)
+        S->>L: withKeyLock(chave)
+        L->>M: has(chave)?
+        alt termo já existe
+            A-->>C: 409 conflito
+        else termo novo
+            S->>M: set(chave, definicao)
+            A-->>C: 201 criado
+        end
+    end
+
+    Note over C,M: QUERY — GET /termos/:chave
+    C->>A: GET /termos/TCP
+    A->>S: query(chave)
+    S->>M: get(chave)
+    alt encontrado
+        A-->>C: 200 {chave, definicao}
+    else não existe
+        A-->>C: 404 não encontrado
+    end
+```
+
+### Concorrência: mutex por chave
+
+```mermaid
+sequenceDiagram
+    participant A1 as ADD/FIX · chave TCP (1)
+    participant A2 as ADD/FIX · chave TCP (2)
+    participant B as ADD/FIX · chave UDP
+    participant L as locks.ts
+
+    par Chaves diferentes correm em paralelo
+        A1->>L: withKeyLock(TCP)
+        L-->>A1: seção crítica (checa-e-escreve)
+    and
+        B->>L: withKeyLock(UDP)
+        L-->>B: seção crítica (checa-e-escreve)
+    end
+
+    A2->>L: withKeyLock(TCP)
+    Note over A2,L: mesma chave: espera a (1) terminar
+    A1-->>L: fim da seção crítica TCP
+    L-->>A2: agora executa TCP
+```
+
+> Os diagramas acima são escritos em **Mermaid** e renderizados automaticamente
+> pelo GitHub na visualização do README.
+
 ## Estrutura de pastas
 
 ```

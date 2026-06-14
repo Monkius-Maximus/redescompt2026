@@ -1,4 +1,6 @@
 import express, { type Request, type Response, type NextFunction } from "express";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import { addBodySchema, fixBodySchema } from "./schemas";
 import * as store from "./store";
@@ -8,6 +10,12 @@ export const app = express();
 
 // Faz o parsing do corpo JSON (necessário para POST/PUT).
 app.use(express.json());
+
+// Serve a interface web estática: public/index.html é entregue em "/".
+// O caminho é resolvido a partir deste arquivo, independente do diretório
+// de onde o servidor é iniciado.
+const publicDir = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
+app.use(express.static(publicDir));
 
 // Middleware único de validação de formato (uma forma só de validar).
 // Em falha, responde 422; em sucesso, substitui o corpo pelos dados já
@@ -24,12 +32,13 @@ function validarCorpo<T extends z.ZodType>(schema: T) {
   };
 }
 
-// Rota raiz: índice do protocolo. Evita o "Cannot GET /" para quem abrir o
-// servidor no navegador e documenta, em tempo de execução, os endpoints.
-app.get("/", (_req: Request, res: Response) => {
+// Índice do protocolo em JSON. A página web fica em "/" (servida de public/);
+// este endpoint expõe a mesma informação em formato legível por máquina.
+app.get("/api", (_req: Request, res: Response) => {
   res.status(200).json({
     servico: "Glossário Técnico Compartilhado",
     equipe: 10,
+    interface: "GET / — página web (public/index.html)",
     endpoints: {
       "GET /health": "verifica se o servidor está no ar",
       "GET /termos": "lista todos os termos (LIST)",

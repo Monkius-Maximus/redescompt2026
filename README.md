@@ -1,12 +1,12 @@
 # Glossário Técnico Compartilhado
 
 Projeto da disciplina de **Sistemas Distribuídos** (UFPE) — **Equipe 10**.
-Este repositório corresponde à **Entrega 1 (Arquitetura e Escopo)**.
 
-Servidor HTTP REST que mantém um **glossário de termos técnicos** (pares
+Nosso objetivo foi o da criação de um Servidor HTTP REST que mantém um **glossário de termos técnicos** (pares
 `chave → definição`) em memória, atendendo a múltiplos clientes simultâneos por
 meio das operações **QUERY**, **ADD**, **FIX** e **LIST**. É a reimplementação,
 agora sobre um framework web, do mesmo sistema feito anteriormente com sockets.
+Devido a natureza do projeto acadêmico, algumas informações serão atualizadas à medida que nosso escopo for aumentando gradualmente, com algumas informações sendo focadas na explicação dos pontos de avaliação estabelecidos, mas esperamos descrever de uma maneira clara nossas intenções.
 
 ## Tecnologias escolhidas e justificativa
 
@@ -363,11 +363,11 @@ uma **demonstração executável do mutex por chave** (`npm run demo`).
         <b>Bruno Ramos</b>
       </td>
       <td align="center">
-        <img src="" width="100px" alt="Flávia Vitória"/><br/>
+        <img src="https://avatars.githubusercontent.com/u/205646287?v=4" width="100px" alt="Flávia Vitória"/><br/>
         <b>Flávia Vitória</b>
       </td>
       <td align="center">
-        <img src="" width="100px" alt="Felipe Berardo"/><br/>
+        <img src="https://avatars.githubusercontent.com/u/204962998?v=4" width="100px" alt="Felipe Berardo"/><br/>
         <b>Felipe Berardo</b>
       </td>
       <td align="center">

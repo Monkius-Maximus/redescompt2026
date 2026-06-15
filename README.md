@@ -1,12 +1,12 @@
 # Glossário Técnico Compartilhado
 
 Projeto da disciplina de **Sistemas Distribuídos** (UFPE) — **Equipe 10**.
-Este repositório corresponde à **Entrega 1 (Arquitetura e Escopo)**.
 
-Servidor HTTP REST que mantém um **glossário de termos técnicos** (pares
+Nosso objetivo foi o da criação de um Servidor HTTP REST que mantém um **glossário de termos técnicos** (pares
 `chave → definição`) em memória, atendendo a múltiplos clientes simultâneos por
 meio das operações **QUERY**, **ADD**, **FIX** e **LIST**. É a reimplementação,
 agora sobre um framework web, do mesmo sistema feito anteriormente com sockets.
+Devido a natureza do projeto acadêmico, algumas informações serão atualizadas à medida que nosso escopo for aumentando gradualmente, com algumas informações sendo focadas na explicação dos pontos de avaliação estabelecidos, mas esperamos descrever de uma maneira clara nossas intenções.
 
 ## Tecnologias escolhidas e justificativa
 
@@ -21,19 +21,133 @@ A arquitetura é um **único servidor com estado central em memória**. A
 concorrência entre requisições é tratada com **bloqueio por chave** (ver
 [Estratégia de locking](#estratégia-de-locking-bloqueio-transacional)).
 
+## Arquitetura
+
+Visão geral: clientes (o **navegador** com a interface web, o **cliente de linha
+de comando** ou ferramentas como `curl`) conversam com um **único servidor
+Express** pelo **protocolo REST/JSON**. O servidor é dividido em camadas de
+responsabilidade única — entrada HTTP (`app.ts`), validação de formato
+(`schemas.ts`), regras de domínio (`store.ts`) e controle de concorrência
+(`locks.ts`) — sobre um estado central em memória (`Map`).
+
+### Diagrama de componentes
+
+```mermaid
+flowchart TD
+    UI["Navegador<br/>interface web (public/index.html)"]
+    CLI["Cliente CLI<br/>(src/cliente.ts)"]
+    CURL["curl / Postman"]
+
+    subgraph Servidor["Servidor Express — porta 3000"]
+        APP["app.ts<br/>rotas REST + middlewares<br/>(JSON · estático · validação Zod)"]
+        STORE["store.ts<br/>regras de domínio<br/>QUERY · LIST · ADD · FIX"]
+        LOCK["locks.ts<br/>mutex por chave"]
+        MAP[("Map em memória<br/>chave → definição")]
+        APP --> STORE
+        STORE --> LOCK
+        STORE --> MAP
+    end
+
+    UI -->|HTTP REST / JSON| APP
+    CLI -->|HTTP REST / JSON| APP
+    CURL -->|HTTP REST / JSON| APP
+```
+
+### Funcionamento de cada elemento
+
+| Elemento | Responsabilidade | Conversa com |
+|---|---|---|
+| `src/index.ts` | Ponto de entrada: sobe o servidor na porta fixa (`3000`). | `app.ts` |
+| `src/app.ts` | Camada HTTP: middlewares (JSON, arquivos estáticos, validação), rotas REST e o mapeamento de erro de domínio → status HTTP. | `schemas`, `store` |
+| `src/schemas.ts` | Valida o **formato** das entradas com Zod e infere os tipos do mesmo schema (uma fonte de verdade). | usado por `app` |
+| `src/store.ts` | Mantém o estado (`Map`) e aplica as **regras de domínio**: unicidade no ADD, existência no FIX. | `locks`, `Map` |
+| `src/locks.ts` | **Mutex por chave**: serializa operações sobre o mesmo termo; chaves diferentes seguem em paralelo. | usado por `store` |
+| `public/index.html` | **Interface web** (cliente) que consome a API por `fetch`. | API via HTTP |
+| `src/cliente.ts` | **Cliente de linha de comando** que consome a API. | API via HTTP |
+| `src/demo-concorrencia.ts` | Exercita o `withKeyLock` para tornar a concorrência **visível**. | `locks` |
+
+### Fluxo de uma requisição (ADD e QUERY)
+
+```mermaid
+sequenceDiagram
+    actor C as Cliente
+    participant A as app.ts
+    participant V as Zod (schemas.ts)
+    participant S as store.ts
+    participant L as locks.ts
+    participant M as Map
+
+    Note over C,M: ADD — POST /termos
+    C->>A: POST /termos {chave, definicao}
+    A->>V: validar formato
+    alt formato inválido
+        A-->>C: 422 validação falhou
+    else formato ok
+        A->>S: add(chave, definicao)
+        S->>L: withKeyLock(chave)
+        L->>M: has(chave)?
+        alt termo já existe
+            A-->>C: 409 conflito
+        else termo novo
+            S->>M: set(chave, definicao)
+            A-->>C: 201 criado
+        end
+    end
+
+    Note over C,M: QUERY — GET /termos/:chave
+    C->>A: GET /termos/TCP
+    A->>S: query(chave)
+    S->>M: get(chave)
+    alt encontrado
+        A-->>C: 200 {chave, definicao}
+    else não existe
+        A-->>C: 404 não encontrado
+    end
+```
+
+### Concorrência: mutex por chave
+
+```mermaid
+sequenceDiagram
+    participant A1 as ADD/FIX · chave TCP (1)
+    participant A2 as ADD/FIX · chave TCP (2)
+    participant B as ADD/FIX · chave UDP
+    participant L as locks.ts
+
+    par Chaves diferentes correm em paralelo
+        A1->>L: withKeyLock(TCP)
+        L-->>A1: seção crítica (checa-e-escreve)
+    and
+        B->>L: withKeyLock(UDP)
+        L-->>B: seção crítica (checa-e-escreve)
+    end
+
+    A2->>L: withKeyLock(TCP)
+    Note over A2,L: mesma chave: espera a (1) terminar
+    A1-->>L: fim da seção crítica TCP
+    L-->>A2: agora executa TCP
+```
+
+> Os diagramas acima são escritos em **Mermaid** e renderizados automaticamente
+> pelo GitHub na visualização do README.
+
 ## Estrutura de pastas
 
 ```
 glossario-tecnico/
-├── package.json          # dependências e scripts (dev / start / typecheck)
+├── package.json          # dependências e scripts (dev / start / cliente / demo / typecheck)
 ├── tsconfig.json         # TypeScript (ESM, strict, sem build)
 ├── README.md
+├── public/
+│   └── index.html        # interface web (página de apresentação + formulários; consome a API via fetch)
 └── src/
-    ├── index.ts          # ponto de entrada: sobe o servidor na porta fixa
-    ├── app.ts            # camada HTTP: middlewares, rotas, mapeia erro → status
-    ├── store.ts          # estado em memória (Map) + operações de domínio
-    ├── locks.ts          # mutex por chave (estratégia de bloqueio)
-    └── schemas.ts        # schemas Zod + tipos inferidos
+    ├── index.ts              # ponto de entrada: sobe o servidor na porta fixa
+    ├── app.ts                # camada HTTP: middlewares, rotas, mapeia erro → status
+    ├── store.ts              # estado em memória (Map) + operações de domínio
+    ├── locks.ts              # mutex por chave (estratégia de bloqueio)
+    ├── schemas.ts            # schemas Zod + tipos inferidos
+    ├── cliente.ts            # cliente de linha de comando interativo (consome a API)
+    └── demo-concorrencia.ts  # demonstração executável do mutex por chave
 ```
 
 Cada arquivo tem uma responsabilidade única: `schemas` não conhece Express,
@@ -67,6 +181,8 @@ const correntes = new Map<string, Promise<void>>();  // uma "corrente" por chave
 | **ADD** | `POST /termos` | `{ chave, definicao }` | `201` `{ chave, definicao }` | `409`, `422` |
 | **FIX** | `PUT /termos/:chave` | `{ definicao }` | `200` `{ chave, definicao }` | `404`, `422` |
 | (teste) | `GET /health` | — | `200` `{ status: "ok" }` | — |
+| (web) | `GET /` | — | `200` página HTML (interface) | — |
+| (índice) | `GET /api` | — | `200` `{ servico, endpoints }` | — |
 
 Semântica dos comandos: **ADD só cria** (`409 Conflict` se o termo já existe) e
 **FIX só atualiza** (`404 Not Found` se o termo não existe). Essa separação torna
@@ -125,12 +241,24 @@ npm install        # instala dependências
 npm run dev        # sobe com auto-reload (tsx watch)
 # ou
 npm start          # sobe sem watch
+npm run cliente    # cliente interativo (precisa do servidor rodando)
+npm run demo       # demonstração do mutex por chave (não precisa do servidor)
 npm run typecheck  # checagem de tipos (tsc --noEmit)
 ```
 
-O servidor sobe em `http://localhost:3000`
+O servidor sobe em `http://localhost:3000` — **abra esse endereço no navegador
+para usar a interface web** (buscar, listar, adicionar e editar termos).
 
-Exemplos:
+## Interface web
+
+Ao abrir `http://localhost:3000`, o servidor entrega uma página estática
+(`public/index.html`) que consome a própria API por `fetch`. Por ela dá para
+**buscar (QUERY)**, **listar (LIST)**, **adicionar (ADD)** e **editar (FIX)**
+termos por formulários — sem precisar de `curl`/PowerShell e sem mudar a
+arquitetura (o estado continua em memória no servidor; a página é só um cliente
+HTTP). O JSON com a lista de endpoints continua disponível em `GET /api`.
+
+## Exemplos via terminal (curl)
 
 ```bash
 curl localhost:3000/health
@@ -153,6 +281,63 @@ curl localhost:3000/termos
 # 200 [{"chave":"TCP","definicao":"..."}]
 ```
 
+> No Windows/PowerShell, o `curl` é um apelido para `Invoke-WebRequest` e não
+> entende `-X`/`-H`/`-d`. Para evitar essa confusão, use a **interface web** ou o
+> **cliente interativo** abaixo (funcionam igual em qualquer sistema operacional).
+
+## Cliente interativo (sem precisar de curl)
+
+O servidor é uma **API REST**: o terminal onde roda `npm run dev` é *apenas o
+servidor* e não lê comandos digitados. Para interagir sem montar requisições à
+mão, o `src/cliente.ts` lê comandos e faz o HTTP por baixo — no mesmo espírito do
+cliente das atividades de socket.
+
+Com o servidor rodando em um terminal, abra **outro** terminal e execute:
+
+```bash
+npm run cliente
+```
+
+Exemplo de sessão:
+
+```
+glossário> ADD TCP Protocolo confiável e orientado a conexão.
+  TCP → Protocolo confiável e orientado a conexão.
+glossário> QUERY TCP
+  TCP → Protocolo confiável e orientado a conexão.
+glossário> FIX TCP Transmission Control Protocol.
+  TCP → Transmission Control Protocol.
+glossário> LIST
+  TCP → Transmission Control Protocol.
+glossário> SAIR
+```
+
+Comandos: `ADD <chave> <definição>`, `FIX <chave> <definição>`, `QUERY <chave>`,
+`LIST`, `HELP`, `SAIR`. A `<chave>` é uma única palavra; o restante da linha é a
+definição. O endereço do servidor pode ser trocado pela variável de ambiente
+`GLOSSARIO_URL` (padrão `http://localhost:3000`).
+
+## Demonstração de concorrência (mutex por chave)
+
+Como os handlers são síncronos, a serialização do lock não aparece numa
+requisição HTTP comum. Para tornar a estratégia de bloqueio **visível**, o
+`src/demo-concorrencia.ts` exercita o `withKeyLock` diretamente, com atrasos
+artificiais:
+
+```bash
+npm run demo
+```
+
+Ele imprime uma linha do tempo de três cenários:
+
+1. **Mesma chave → serializa**: operações sobre a mesma chave rodam uma de cada
+   vez (A1 → A2 → A3).
+2. **Chaves diferentes → em paralelo**: chaves distintas não se bloqueiam.
+3. **Erro não quebra a corrente**: se uma operação falha no meio, as seguintes
+   sobre a mesma chave ainda executam.
+
+É a forma prática de comprovar o "plano de bloqueios transacionais" exigido.
+
 ## Status da Entrega 1
 
 - [x] Decisão tecnológica documentada e justificada (seção *Tecnologias*).
@@ -162,6 +347,10 @@ curl localhost:3000/termos
 - [x] Servidor base rodando na porta fixa, com rota de teste (`GET /health`).
 - [x] Validações de formato e regras de negócio (Zod + unicidade/existência no store).
 - [x] Plano de bloqueios transacionais (mutex por chave, em `src/locks.ts`).
+
+Além do mínimo exigido, a entrega inclui uma **interface web** (`GET /`), um
+**cliente de linha de comando** (`npm run cliente`) para interação sem `curl` e
+uma **demonstração executável do mutex por chave** (`npm run demo`).
 
 ## Equipe do Projeto
 
@@ -174,11 +363,11 @@ curl localhost:3000/termos
         <b>Bruno Ramos</b>
       </td>
       <td align="center">
-        <img src="" width="100px" alt="Flávia Vitória"/><br/>
+        <img src="https://avatars.githubusercontent.com/u/205646287?v=4" width="100px" alt="Flávia Vitória"/><br/>
         <b>Flávia Vitória</b>
       </td>
       <td align="center">
-        <img src="" width="100px" alt="Felipe Berardo"/><br/>
+        <img src="https://avatars.githubusercontent.com/u/204962998?v=4" width="100px" alt="Felipe Berardo"/><br/>
         <b>Felipe Berardo</b>
       </td>
       <td align="center">

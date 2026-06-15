@@ -3,9 +3,14 @@
   "version": "0.1.0",
   "description": "Glossário Técnico Compartilhado — servidor HTTP REST (Equipe 10 · Sistemas Distribuídos · UFPE)",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
+    "cliente": "tsx src/cliente.ts",
+    "demo": "tsx src/demo-concorrencia.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -5,6 +5,8 @@ import { z } from "zod";
 import { addBodySchema, fixBodySchema } from "./schemas";
 import * as store from "./store";
 import { TermoJaExisteError, TermoNaoEncontradoError } from "./store";
+import { estadoLocks } from "./locks";
+import { barramento } from "./barramento";
 import { log } from "./log";
 
 export const app = express();
@@ -26,6 +28,10 @@ app.use(express.static(publicDir));
 let seqReq = 0;
 let emVoo = 0;
 app.use((req: Request, res: Response, next: NextFunction) => {
+  // O fluxo de eventos (SSE) é uma conexão longa que só termina quando o
+  // cliente desconecta; fica fora do contador em_voo para não distorcer a
+  // observação de concorrência das requisições do protocolo.
+  if (req.path === "/eventos") return next();
   const id = ++seqReq;
   emVoo += 1;
   const inicio = process.hrtime.bigint();
@@ -38,19 +44,28 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   });
   res.on("finish", () => {
     emVoo -= 1;
-    const ms = Math.round(Number(process.hrtime.bigint() - inicio) / 1e5) / 10;
-    const params = req.params as Record<string, string | undefined>;
-    const corpo = req.body as { chave?: unknown } | undefined;
-    const chaveBruta = params.chave ?? (corpo && typeof corpo === "object" ? corpo.chave : undefined);
-    log.info("req.concluida", {
-      req: id,
-      metodo: req.method,
-      rota: req.originalUrl,
-      chave: typeof chaveBruta === "string" ? chaveBruta : undefined,
-      status: res.statusCode,
-      ms,
-      em_voo: emVoo,
-    });
+    // Logar NUNCA pode derrubar o servidor: em rotas não casadas (ex.:
+    // /favicon.ico pedido pelo navegador) o Express 5 não popula req.params,
+    // então acessá-lo direto lançaria e mataria o processo. Por isso o acesso é
+    // defensivo e todo o corpo fica sob try/catch.
+    try {
+      const ms = Math.round(Number(process.hrtime.bigint() - inicio) / 1e5) / 10;
+      const params = (req.params ?? {}) as Record<string, string | undefined>;
+      const corpo = req.body as { chave?: unknown } | undefined;
+      const chaveBruta =
+        params.chave ?? (corpo && typeof corpo === "object" ? corpo.chave : undefined);
+      log.info("req.concluida", {
+        req: id,
+        metodo: req.method,
+        rota: req.originalUrl,
+        chave: typeof chaveBruta === "string" ? chaveBruta : undefined,
+        status: res.statusCode,
+        ms,
+        em_voo: emVoo,
+      });
+    } catch {
+      // ignora qualquer falha de logging
+    }
   });
   next();
 });
@@ -83,6 +98,8 @@ app.get("/api", (_req: Request, res: Response) => {
       "GET /termos/:chave": "busca um termo (QUERY)",
       "POST /termos": "cria um termo (ADD) — corpo: { chave, definicao }",
       "PUT /termos/:chave": "atualiza um termo (FIX) — corpo: { definicao }",
+      "GET /locks": "retrato das travas ativas (ocupadas / com fila)",
+      "GET /eventos": "fluxo SSE com estado em tempo real (termos + travas)",
     },
   });
 });
@@ -90,6 +107,12 @@ app.get("/api", (_req: Request, res: Response) => {
 // Rota de teste exigida na Entrega 1.
 app.get("/health", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok" });
+});
+
+// O navegador pede /favicon.ico automaticamente; respondemos 204 (sem conteúdo)
+// para não poluir os logs com 404.
+app.get("/favicon.ico", (_req: Request, res: Response) => {
+  res.status(204).end();
 });
 
 // LIST — GET /termos
@@ -121,6 +144,47 @@ app.put(
     res.status(200).json(await store.fix(req.params.chave, definicao));
   },
 );
+
+// LOCKS — GET /locks: retrato atual das travas ativas (ocupadas / com fila).
+// Útil para inspeção via curl e como fonte do polling de fallback da interface.
+app.get("/locks", (_req: Request, res: Response) => {
+  res.status(200).json(estadoLocks());
+});
+
+// EVENTOS — GET /eventos: fluxo SSE (Server-Sent Events) que entrega o estado em
+// TEMPO REAL para a interface, sem ela precisar atualizar manualmente. Ao
+// conectar, envia um retrato inicial (lista de termos + travas) e, depois,
+// reenvia a cada mudança publicada no barramento por store/locks.
+app.get("/eventos", (req: Request, res: Response) => {
+  res.status(200).set({
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no", // evita buffering em proxies (ex.: nginx)
+  });
+  res.flushHeaders?.();
+
+  const enviar = (evento: string, dados: unknown): void => {
+    res.write(`event: ${evento}\n`);
+    res.write(`data: ${JSON.stringify(dados)}\n\n`);
+  };
+
+  // Estado inicial, para o cliente pintar a tela já na conexão.
+  enviar("termos", store.list());
+  enviar("locks", estadoLocks());
+
+  const offTermos = barramento.inscrever("termos:mudou", (lista) => enviar("termos", lista));
+  const offLocks = barramento.inscrever("locks:mudou", (snap) => enviar("locks", snap));
+
+  // Comentário-batimento periódico para manter a conexão viva através de proxies.
+  const batimento = setInterval(() => res.write(": ping\n\n"), 15000);
+
+  req.on("close", () => {
+    clearInterval(batimento);
+    offTermos();
+    offLocks();
+  });
+});
 
 // Tratador de erros: mapeia erros de domínio para status HTTP.
 // (Express 5 encaminha erros de handlers async para cá automaticamente.)

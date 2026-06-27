@@ -9,7 +9,7 @@
       --teal: #2bb898; --teal-dark: #1f8d75; --teal-50: #eafaf5;
       --ink: #1d2b27; --muted: #5b6b66; --bg: #f4f7f6; --card: #fff;
       --border: #dde7e3; --danger: #c0392b; --danger-bg: #fdecea;
-      --ok: #1f8d75; --ok-bg: #e8f7f1;
+      --ok: #1f8d75; --ok-bg: #e8f7f1; --warn: #9a6b00; --warn-bg: #fff6e0;
     }
     * { box-sizing: border-box; }
     body {
@@ -29,6 +29,8 @@
     }
     .dot { width: .6rem; height: .6rem; border-radius: 50%; background: #ffd23f; }
     .dot.on { background: #b6f7df; } .dot.off { background: #ff7a7a; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+    .dot.on { animation: pulse 2s ease-in-out infinite; }
     main { max-width: 880px; margin: -1.25rem auto 3rem; padding: 0 1.25rem; }
     .card {
       background: var(--card); border: 1px solid var(--border); border-radius: 14px;
@@ -36,35 +38,69 @@
       box-shadow: 0 6px 20px rgba(31,141,117,.06);
     }
     .card h2 { margin: 0 0 .9rem; font-size: 1.1rem; }
+    .card h2 small { font-weight: 400; color: var(--muted); }
     label { display: block; font-size: .85rem; color: var(--muted); margin: 0 0 .25rem; }
     input[type=text], textarea {
       width: 100%; padding: .6rem .7rem; border: 1px solid var(--border);
       border-radius: 9px; font: inherit; background: #fff; color: var(--ink);
     }
+    input:read-only { background: var(--teal-50); color: var(--teal-dark); font-weight: 600; }
     textarea { resize: vertical; min-height: 3.2rem; }
     input:focus, textarea:focus { outline: 2px solid var(--teal); border-color: var(--teal); }
     .field { margin-bottom: .8rem; }
     button {
       cursor: pointer; border: none; border-radius: 9px; padding: .6rem 1rem;
       font: inherit; font-weight: 600; background: var(--teal); color: #fff;
-      transition: background .15s;
+      transition: background .15s; display: inline-flex; align-items: center; gap: .5rem;
     }
     button:hover { background: var(--teal-dark); }
+    button:disabled { opacity: .7; cursor: progress; }
     button.ghost { background: transparent; color: var(--teal-dark); border: 1px solid var(--border); }
     button.ghost:hover { background: var(--teal-50); }
     button.small { padding: .35rem .6rem; font-size: .85rem; }
+    .spinner {
+      width: .9em; height: .9em; border: 2px solid rgba(255,255,255,.5);
+      border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite;
+    }
+    button.ghost .spinner { border-color: var(--border); border-top-color: var(--teal-dark); }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .toolbar { display: flex; gap: .6rem; align-items: flex-end; flex-wrap: wrap; }
     .toolbar .grow { flex: 1 1 240px; }
     #msg { margin: 0 0 1rem; padding: .7rem .9rem; border-radius: 9px; display: none; }
     #msg.show { display: block; }
     #msg.ok { background: var(--ok-bg); color: var(--ok); }
     #msg.err { background: var(--danger-bg); color: var(--danger); }
+    .nota {
+      margin-top: .7rem; padding: .6rem .8rem; border-radius: 9px;
+      background: var(--warn-bg); color: var(--warn); font-size: .9rem;
+    }
+    .reading {
+      margin-top: .9rem; padding: .9rem 1rem; border-radius: 10px;
+      background: var(--teal-50); border: 1px solid var(--border);
+    }
+    .reading .rterm { font-weight: 800; color: var(--teal-dark); font-size: 1.05rem; }
+    .reading .rdef { margin-top: .35rem; white-space: pre-wrap; }
+    .reading .close { float: right; }
     table { width: 100%; border-collapse: collapse; }
     th, td { text-align: left; padding: .6rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
     th { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
     td.chave { font-weight: 700; color: var(--teal-dark); white-space: nowrap; }
     td.acoes { white-space: nowrap; text-align: right; }
     .empty { color: var(--muted); padding: .8rem .5rem; font-style: italic; }
+    .badge-lock {
+      display: inline-block; margin-left: .4rem; padding: .12rem .5rem; border-radius: 999px;
+      background: var(--warn-bg); color: var(--warn); font-size: .72rem; font-weight: 600;
+      white-space: nowrap;
+    }
+    tr.locked td.chave .kterm { opacity: .75; }
+    .lock-row {
+      display: flex; gap: .8rem; align-items: center; flex-wrap: wrap;
+      padding: .5rem .6rem; border-bottom: 1px solid var(--border); font-size: .9rem;
+    }
+    .lock-row:last-child { border-bottom: none; }
+    .lock-row .chave { font-weight: 700; color: var(--teal-dark); min-width: 5rem; }
+    .lock-row .tag-busy { color: var(--danger); }
+    .lock-row .tag-wait { color: var(--warn); }
     footer { text-align: center; color: var(--muted); font-size: .85rem; padding: 0 1rem 2.5rem; }
     footer a { color: var(--teal-dark); }
     .count { color: var(--muted); font-size: .85rem; font-weight: 400; }
@@ -74,18 +110,36 @@
   <header class="hero">
     <h1>Glossário Técnico Compartilhado</h1>
     <p>Equipe 10 · Sistemas Distribuídos · UFPE</p>
-    <p>Servidor HTTP REST que mantém termos técnicos (chave → definição) em memória.</p>
-    <span class="badge"><span id="statusDot" class="dot"></span><span id="statusText">verificando servidor…</span></span>
+    <p>Dicionário de termos técnicos multiusuário, com travas no servidor e atualização em tempo real.</p>
+    <span class="badge"><span id="statusDot" class="dot"></span><span id="statusText">conectando…</span></span>
   </header>
 
   <main>
     <div id="msg"></div>
 
+    <!-- BUSCA RÁPIDA (QUERY) + painel de leitura -->
     <section class="card">
-      <h2>Adicionar termo <small style="font-weight:400;color:var(--muted)">(ADD)</small></h2>
+      <h2>Buscar termo <small>(QUERY)</small></h2>
+      <div class="toolbar">
+        <div class="grow">
+          <label for="qChave">Termo</label>
+          <input type="text" id="qChave" placeholder="ex.: TCP" autocomplete="off" />
+        </div>
+        <button id="qBtn">Buscar</button>
+      </div>
+      <div id="leituraWrap" class="reading" hidden>
+        <button id="leituraFechar" class="ghost small close">Fechar</button>
+        <div class="rterm" id="leituraTermo"></div>
+        <div class="rdef" id="leituraDef"></div>
+      </div>
+    </section>
+
+    <!-- ADICIONAR (ADD) -->
+    <section class="card">
+      <h2>Adicionar definição <small>(ADD)</small></h2>
       <div class="field">
         <label for="addChave">Termo</label>
-        <input type="text" id="addChave" placeholder="ex.: TCP" maxlength="200" />
+        <input type="text" id="addChave" placeholder="ex.: TCP" maxlength="200" autocomplete="off" />
       </div>
       <div class="field">
         <label for="addDef">Definição</label>
@@ -94,18 +148,28 @@
       <button id="addBtn">Adicionar</button>
     </section>
 
-    <section class="card">
-      <h2>Buscar e listar</h2>
-      <div class="toolbar">
-        <div class="grow">
-          <label for="qChave">Buscar termo (QUERY)</label>
-          <input type="text" id="qChave" placeholder="ex.: TCP" />
-        </div>
-        <button id="qBtn">Buscar</button>
-        <button id="listBtn" class="ghost">Listar todos</button>
+    <!-- RETIFICAR (FIX) -->
+    <section class="card" id="fixCard">
+      <h2>Retificar definição <small>(FIX)</small></h2>
+      <div class="field">
+        <label for="fixChave">Termo</label>
+        <input type="text" id="fixChave" placeholder="ex.: TCP (ou clique em “Retificar” na tabela)" maxlength="200" autocomplete="off" />
       </div>
+      <div class="field">
+        <label for="fixDef">Nova definição</label>
+        <textarea id="fixDef" placeholder="texto que substituirá a definição atual" maxlength="2000"></textarea>
+      </div>
+      <button id="fixBtn">Salvar retificação</button>
+      <div id="fixNota" class="nota" hidden></div>
     </section>
 
+    <!-- ATIVIDADE / TRAVAS em tempo real -->
+    <section class="card">
+      <h2>Atividade no servidor <small>(travas em tempo real)</small></h2>
+      <div id="atividade"><p class="empty">Nenhuma operação em andamento.</p></div>
+    </section>
+
+    <!-- LISTA (LIST) em tempo real -->
     <section class="card">
       <h2>Termos <span id="count" class="count"></span></h2>
       <div id="tableWrap"><p class="empty">Carregando…</p></div>
@@ -113,19 +177,24 @@
   </main>
 
   <footer>
-    Interface estática consumindo a API REST do próprio servidor — endpoints em <a href="/api">/api</a>.
+    Interface consumindo a API REST do próprio servidor; estado em tempo real via SSE
+    (<a href="/eventos">/eventos</a>). Lista de endpoints em <a href="/api">/api</a>.
   </footer>
 
   <script>
     const $ = (id) => document.getElementById(id);
     const msgEl = $("msg");
+    let msgTimer = null;
 
-    function flash(text, kind) {
+    function flash(text, kind = "ok") {
+      clearTimeout(msgTimer);
       msgEl.textContent = text;
-      msgEl.className = "show " + (kind || "ok");
-      if (kind !== "err") setTimeout(() => { msgEl.className = ""; }, 4000);
+      msgEl.className = "show " + kind;
+      if (kind !== "err") msgTimer = setTimeout(() => { msgEl.className = ""; }, 4000);
     }
 
+    // Requisição HTTP genérica; devolve { status, ok, data } e nunca "explode"
+    // o JSON inválido (mantém o texto cru se não for JSON).
     async function api(method, path, body) {
       const res = await fetch(path, {
         method,
@@ -138,6 +207,8 @@
       return { status: res.status, ok: res.ok, data };
     }
 
+    // Monta a mensagem de erro a partir da resposta do servidor (inclui os
+    // detalhes de validação do Zod quando houver).
     function erroMsg(r) {
       if (r.data && typeof r.data === "object" && r.data.erro) {
         let m = r.data.erro;
@@ -149,110 +220,246 @@
       return "erro " + r.status;
     }
 
-    async function checarStatus() {
-      try {
-        const r = await api("GET", "/health");
-        if (r.ok) { $("statusDot").className = "dot on"; $("statusText").textContent = "servidor no ar"; return; }
-      } catch (e) {}
-      $("statusDot").className = "dot off";
-      $("statusText").textContent = "servidor fora do ar";
+    // Executa `fn` mantendo o botão em estado de carregamento (spinner + texto).
+    async function comCarregando(btn, texto, fn) {
+      const orig = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>' + texto;
+      try { return await fn(); }
+      finally { btn.disabled = false; btn.innerHTML = orig; }
     }
 
-    function render(termos) {
-      const wrap = $("tableWrap");
+    // ---------- estado local (espelho do servidor) ----------
+    let termos = [];
+    let locks = new Map(); // chave -> { chave, ocupado, aguardando }
+
+    function travaDe(chave) {
+      const l = locks.get(chave);
+      return l && (l.ocupado || l.aguardando > 0) ? l : null;
+    }
+
+    // ---------- conexão em tempo real (SSE) ----------
+    function setConexao(estado) {
+      const dot = $("statusDot"), txt = $("statusText");
+      dot.className = "dot " + (estado === "conectado" ? "on" : estado === "reconectando" ? "off" : "");
+      txt.textContent =
+        estado === "conectado" ? "tempo real • conectado"
+        : estado === "reconectando" ? "sem conexão • reconectando…"
+        : "conectando…";
+    }
+
+    function conectar() {
+      if (!("EventSource" in window)) { iniciarPolling(); return; }
+      setConexao("conectando");
+      const es = new EventSource("/eventos");
+      es.addEventListener("open", () => setConexao("conectado"));
+      es.addEventListener("error", () => setConexao("reconectando")); // o browser reconecta sozinho
+      es.addEventListener("termos", (ev) => { termos = JSON.parse(ev.data); renderTermos(); });
+      es.addEventListener("locks", (ev) => { aplicarLocks(JSON.parse(ev.data)); });
+    }
+
+    // Fallback para navegadores sem SSE: consulta periódica.
+    function iniciarPolling() {
+      setConexao("conectado");
+      const tick = async () => {
+        try {
+          const [a, b] = await Promise.all([api("GET", "/termos"), api("GET", "/locks")]);
+          if (a.ok && Array.isArray(a.data)) { termos = a.data; renderTermos(); }
+          if (b.ok && Array.isArray(b.data)) aplicarLocks(b.data);
+          setConexao("conectado");
+        } catch { setConexao("reconectando"); }
+      };
+      tick();
+      setInterval(tick, 2500);
+    }
+
+    function aplicarLocks(lista) {
+      locks = new Map(lista.map((l) => [l.chave, l]));
+      renderAtividade();
+      renderBadges();
+      atualizarNotaFix();
+    }
+
+    // ---------- render: lista de termos ----------
+    function renderTermos() {
       $("count").textContent = termos.length ? "(" + termos.length + ")" : "";
+      const wrap = $("tableWrap");
       if (!termos.length) {
         wrap.innerHTML = '<p class="empty">Nenhum termo ainda. Adicione o primeiro acima.</p>';
         return;
       }
       const table = document.createElement("table");
       table.innerHTML = "<thead><tr><th>Termo</th><th>Definição</th><th></th></tr></thead>";
-      const tbody = document.createElement("tbody");
-      termos.forEach((t) => tbody.appendChild(linha(t)));
-      table.appendChild(tbody);
+      const tb = document.createElement("tbody");
+      termos.forEach((t) => tb.appendChild(linha(t)));
+      table.appendChild(tb);
       wrap.innerHTML = "";
       wrap.appendChild(table);
+      renderBadges();
     }
 
     function linha(t) {
       const tr = document.createElement("tr");
+      tr.dataset.chave = t.chave;
+
       const tdChave = document.createElement("td");
       tdChave.className = "chave";
-      tdChave.textContent = t.chave;
+      const kterm = document.createElement("span");
+      kterm.className = "kterm";
+      kterm.textContent = t.chave;
+      const badge = document.createElement("span");
+      badge.className = "badge-lock";
+      badge.hidden = true;
+      tdChave.append(kterm, badge);
+
       const tdDef = document.createElement("td");
       tdDef.textContent = t.definicao;
-      const tdAcoes = document.createElement("td");
-      tdAcoes.className = "acoes";
-      const btn = document.createElement("button");
-      btn.className = "ghost small";
-      btn.textContent = "Editar";
-      btn.onclick = () => editar(t, tdDef, tdAcoes);
-      tdAcoes.appendChild(btn);
-      tr.append(tdChave, tdDef, tdAcoes);
+
+      const tdAc = document.createElement("td");
+      tdAc.className = "acoes";
+      const bVer = document.createElement("button");
+      bVer.className = "ghost small";
+      bVer.textContent = "Ver";
+      bVer.onclick = () => mostrarLeitura(t);
+      const bFix = document.createElement("button");
+      bFix.className = "small";
+      bFix.textContent = "Retificar";
+      bFix.onclick = () => carregarFix(t);
+      tdAc.append(bVer, bFix);
+
+      tr.append(tdChave, tdDef, tdAc);
       return tr;
     }
 
-    function editar(t, tdDef, tdAcoes) {
-      const ta = document.createElement("textarea");
-      ta.value = t.definicao;
-      ta.maxLength = 2000;
-      tdDef.textContent = "";
-      tdDef.appendChild(ta);
-      ta.focus();
-      tdAcoes.innerHTML = "";
-      const salvar = document.createElement("button");
-      salvar.className = "small";
-      salvar.textContent = "Salvar";
-      salvar.onclick = async () => {
-        const r = await api("PUT", "/termos/" + encodeURIComponent(t.chave), { definicao: ta.value.trim() });
-        if (r.ok) { flash("Atualizado: " + t.chave, "ok"); listar(); }
-        else flash("Falha ao atualizar " + t.chave + " — " + erroMsg(r), "err");
-      };
-      const cancelar = document.createElement("button");
-      cancelar.className = "ghost small";
-      cancelar.textContent = "Cancelar";
-      cancelar.onclick = () => listar();
-      tdAcoes.append(salvar, cancelar);
+    // Atualiza os "selos" de trava nas linhas, sem redesenhar a tabela toda.
+    function renderBadges() {
+      document.querySelectorAll("tr[data-chave]").forEach((tr) => {
+        const l = travaDe(tr.dataset.chave);
+        const badge = tr.querySelector(".badge-lock");
+        if (!badge) return;
+        if (l) {
+          tr.classList.add("locked");
+          badge.hidden = false;
+          badge.textContent = l.ocupado
+            ? "🔒 sendo editado" + (l.aguardando ? " · " + l.aguardando + " na fila" : "")
+            : "⏳ " + l.aguardando + " na fila";
+        } else {
+          tr.classList.remove("locked");
+          badge.hidden = true;
+          badge.textContent = "";
+        }
+      });
     }
 
-    async function adicionar() {
-      const chave = $("addChave").value.trim();
-      const definicao = $("addDef").value.trim();
-      if (!chave || !definicao) { flash("Preencha termo e definição.", "err"); return; }
-      const r = await api("POST", "/termos", { chave, definicao });
-      if (r.ok) {
-        flash("Adicionado: " + chave, "ok");
-        $("addChave").value = ""; $("addDef").value = "";
-        listar();
-      } else {
-        flash("Não foi possível adicionar — " + erroMsg(r), "err");
+    // ---------- render: painel de atividade (travas) ----------
+    function renderAtividade() {
+      const wrap = $("atividade");
+      const ativos = [...locks.values()].filter((l) => l.ocupado || l.aguardando > 0);
+      if (!ativos.length) {
+        wrap.innerHTML = '<p class="empty">Nenhuma operação em andamento.</p>';
+        return;
       }
+      wrap.innerHTML = "";
+      ativos.forEach((l) => {
+        const row = document.createElement("div");
+        row.className = "lock-row";
+        const chave = document.createElement("span");
+        chave.className = "chave";
+        chave.textContent = l.chave;
+        const estado = document.createElement("span");
+        estado.className = l.ocupado ? "tag-busy" : "";
+        estado.textContent = l.ocupado ? "🔒 em edição (seção crítica)" : "livre";
+        const fila = document.createElement("span");
+        fila.className = "tag-wait";
+        fila.textContent = l.aguardando ? "⏳ " + l.aguardando + " aguardando a liberação" : "";
+        row.append(chave, estado, fila);
+        wrap.appendChild(row);
+      });
+    }
+
+    // ---------- leitura (QUERY) ----------
+    function mostrarLeitura(t) {
+      $("leituraWrap").hidden = false;
+      $("leituraTermo").textContent = t.chave;
+      $("leituraDef").textContent = t.definicao;
     }
 
     async function buscar() {
       const chave = $("qChave").value.trim();
-      if (!chave) { listar(); return; }
-      const r = await api("GET", "/termos/" + encodeURIComponent(chave));
-      if (r.ok) { render([r.data]); flash("Encontrado: " + chave, "ok"); }
-      else { render([]); flash("Não encontrado: " + chave, "err"); }
+      if (!chave) { flash("Digite um termo para buscar.", "err"); return; }
+      try {
+        const r = await api("GET", "/termos/" + encodeURIComponent(chave));
+        if (r.ok) { mostrarLeitura(r.data); flash("Encontrado: " + chave); }
+        else { $("leituraWrap").hidden = true; flash("Não encontrado: " + chave, "err"); }
+      } catch { flash("Sem conexão com o servidor.", "err"); }
     }
 
-    async function listar() {
-      try {
-        const r = await api("GET", "/termos");
-        if (r.ok && Array.isArray(r.data)) render(r.data);
-      } catch (e) {
-        flash("Não foi possível falar com o servidor.", "err");
+    // ---------- adicionar (ADD) ----------
+    async function adicionar() {
+      const chave = $("addChave").value.trim();
+      const definicao = $("addDef").value.trim();
+      if (!chave || !definicao) { flash("Preencha termo e definição.", "err"); return; }
+      await comCarregando($("addBtn"), "Adicionando…", async () => {
+        try {
+          const r = await api("POST", "/termos", { chave, definicao });
+          if (r.ok) { flash("Adicionado: " + chave); $("addChave").value = ""; $("addDef").value = ""; }
+          else flash("Não foi possível adicionar — " + erroMsg(r), "err");
+        } catch { flash("Sem conexão com o servidor.", "err"); }
+      });
+    }
+
+    // ---------- retificar (FIX) ----------
+    function carregarFix(t) {
+      $("fixChave").value = t.chave;
+      $("fixDef").value = t.definicao;
+      atualizarNotaFix();
+      $("fixCard").scrollIntoView({ behavior: "smooth", block: "center" });
+      $("fixDef").focus();
+    }
+
+    // Mostra um aviso ao vivo quando o termo no formulário está travado por
+    // outra retificação em andamento (sua alteração entrará na fila).
+    function atualizarNotaFix() {
+      const chave = $("fixChave").value.trim();
+      const nota = $("fixNota");
+      const l = chave ? travaDe(chave) : null;
+      if (l) {
+        nota.hidden = false;
+        nota.textContent = l.ocupado
+          ? `🔒 "${chave}" está sendo retificado agora` +
+            (l.aguardando ? ` (${l.aguardando} na fila)` : "") +
+            " — sua alteração entrará na fila e aguardará a liberação."
+          : `⏳ "${chave}" tem ${l.aguardando} alteração(ões) na fila.`;
+      } else {
+        nota.hidden = true;
+        nota.textContent = "";
       }
     }
 
+    async function retificar() {
+      const chave = $("fixChave").value.trim();
+      const definicao = $("fixDef").value.trim();
+      if (!chave || !definicao) { flash("Preencha termo e nova definição.", "err"); return; }
+      const travado = !!travaDe(chave);
+      await comCarregando($("fixBtn"), travado ? "Aguardando liberação…" : "Salvando…", async () => {
+        if (travado) flash(`"${chave}" está travado por outra retificação — aguardando liberação…`, "ok");
+        try {
+          const r = await api("PUT", "/termos/" + encodeURIComponent(chave), { definicao });
+          if (r.ok) { flash("Retificado: " + chave); $("fixDef").value = r.data.definicao; }
+          else flash("Falha ao retificar — " + erroMsg(r), "err");
+        } catch { flash("Sem conexão com o servidor.", "err"); }
+      });
+    }
+
+    // ---------- ligações ----------
     $("addBtn").onclick = adicionar;
     $("qBtn").onclick = buscar;
-    $("listBtn").onclick = () => { $("qChave").value = ""; listar(); };
+    $("fixBtn").onclick = retificar;
     $("qChave").addEventListener("keydown", (e) => { if (e.key === "Enter") buscar(); });
+    $("fixChave").addEventListener("input", atualizarNotaFix);
+    $("leituraFechar").onclick = () => { $("leituraWrap").hidden = true; };
 
-    checarStatus();
-    listar();
+    conectar();
   </script>
 </body>
 </html>

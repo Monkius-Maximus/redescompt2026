@@ -1,10 +1,22 @@
 import { app } from "./app";
 import { log } from "./log";
+import * as store from "./store";
+import { caminhoArquivo } from "./persistencia";
 
 // Porta fixa do servidor (a Entrega 1 exige "porta fixada").
-// Ajustar para a porta definida pelo professor/equipe, se houver.
 const PORTA = 3000;
 
-app.listen(PORTA, () => {
-  log.info("servidor.iniciado", { porta: PORTA, url: `http://localhost:${PORTA}` });
-});
+// Carrega o estado persistido em disco ANTES de aceitar requisições, para o
+// glossário já subir com os termos salvos em execuções anteriores.
+async function main(): Promise<void> {
+  await store.iniciar();
+  app.listen(PORTA, () => {
+    log.info("servidor.iniciado", {
+      porta: PORTA,
+      url: `http://localhost:${PORTA}`,
+      db: caminhoArquivo(),
+    });
+  });
+}
+
+main();
